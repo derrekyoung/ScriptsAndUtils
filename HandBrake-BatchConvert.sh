@@ -21,8 +21,7 @@
 ###############################################################################
 
 hbcli=/Applications/HandBrakeCLI/HandBrakeCLI
-source_dir="/Volumes/ELEMENTS2TB/Movies/Dune"
-#source_dir="/Users/derrek/Documents/tmp"
+source_dir="/Movies"
 input_file_type="avi"
 output_file_type="m4v"
 
