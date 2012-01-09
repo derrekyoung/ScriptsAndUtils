@@ -36,7 +36,7 @@ convert() {
 }
 
 # Find the files and pipe the results into the read command.  The read command properly handles spaces in directories and files names.
-find $source_dir -name *.$input_file_type | while read in_file
+find "$source_dir" -name *.$input_file_type | while read in_file
 do
         echo "Processing…"
 	echo ">Input  "$in_file
