@@ -8,7 +8,7 @@
 # To run in your environment set the variables:
 #   hbcli - Path to your HandBrakeCLI
 #	
-#   source_dir - Starting directory for recursive search
+#   dirs - Array of starting directories for recursive search
 #	
 #   input_file_type - Input file type to search for
 #	
@@ -17,28 +17,35 @@
 #
 # Change log:
 # 2012-01-08: Initial release.  Tested on Mac OS X Lion.
+# 2012-02-09: Added ability to process multiple directories.
 #
 ###############################################################################
 
 hbcli=/Applications/HandBrakeCLI/HandBrakeCLI
-source_dir="/Movies"
-input_file_type="avi"
+input_file_type="wmv"
 output_file_type="m4v"
 
+dirs=( '/Movies/tmp/dir1'
+       '/Movies/tmp/dir2' )
+
 echo "# Using HandBrakeCLI at "$hbcli
-echo "# Using source directory "$source_dir
 echo "# Converting "$input_file_type" to "$output_file_type
 
 # Convert from one file to another
 convert() {
 	# The beginning part, echo "" | , is really important.  Without that, HandBrake exits the while loop.
-	echo "" | $hbcli -i "$1" -o "$2" --preset="Universal";
+	echo ""# | $hbcli -i "$1" -o "$2" --preset="Universal";
 }
 
-# Find the files and pipe the results into the read command.  The read command properly handles spaces in directories and files names.
-find "$source_dir" -name *.$input_file_type | while read in_file
+# Iterate over the array of directories
+for i in "${dirs[@]}"
 do
-        echo "Processing…"
+  echo "Processing source directory: " $i
+
+  # Find the files and pipe the results into the read command because the read command properly handles spaces in directories and files names.
+  find "$i" -name *.$input_file_type | while read in_file
+  do
+        echo "Processing file..."
 	echo ">Input  "$in_file
 
 	# Replace the file type
@@ -54,6 +61,7 @@ do
         fi
 
 	echo ">Finished "$out_file "\n\n"
+  done
 done
 
 echo "DONE CONVERTING FILES"
