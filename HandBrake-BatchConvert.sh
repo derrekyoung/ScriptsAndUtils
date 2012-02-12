@@ -18,15 +18,16 @@
 # Change log:
 # 2012-01-08: Initial release.  Tested on Mac OS X Lion.
 # 2012-02-09: Added ability to process multiple directories.
+# 2012-02-12: Added default system beep to signal end of all processing. 
 #
 ###############################################################################
 
 hbcli=/Applications/HandBrakeCLI/HandBrakeCLI
-input_file_type="wmv"
+input_file_type="avi"
 output_file_type="m4v"
 
-dirs=( '/Movies/tmp/dir1'
-       '/Movies/tmp/dir2' )
+dirs=( '/dir1'
+       '/dir2' )
 
 echo "# Using HandBrakeCLI at "$hbcli
 echo "# Converting "$input_file_type" to "$output_file_type
@@ -65,3 +66,6 @@ do
 done
 
 echo "DONE CONVERTING FILES"
+echo -en "\007"
+echo -en "\007"
+echo -en "\007"
