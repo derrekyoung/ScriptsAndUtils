@@ -18,7 +18,7 @@ brew-upgrade-main() {
     # Upgrade the Homebrew apps
     brew update && brew cleanup && brew list | xargs brew upgrade
 
-    echo "Brew upgrade finished."
+    echo -e "Brew upgrade finished. \n"
 }
 
 # Get info for a single cask
