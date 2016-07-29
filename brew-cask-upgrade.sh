@@ -1,8 +1,8 @@
 #!/bin/bash
 
 ################################################################################
-#   Does a mass upgrade of your Brew apps and allows you to select which Cask
-#   apps to install.
+#   Does a mass upgrade of your Homebrew apps and allows you to select which
+#   Cask apps to upgrade.
 #
 #   Author: Derrek Young, derrekyoung.com
 #   Requirements:
@@ -13,12 +13,10 @@
 
 # Upgrade all the Homebrew apps
 brew-upgrade-main() {
-    # brew update && brew cleanup
-
     # Upgrade the Homebrew apps
     brew update && brew cleanup && brew list | xargs brew upgrade
 
-    echo -e "Brew upgrade finished. \n"
+    echo "Brew upgrade finished."
 }
 
 # Get info for a single cask
@@ -90,7 +88,8 @@ cask-upgrade-main() {
     var=$( cask-lookup  | grep -B 3 'Not installed' | sed -e '/^http/d;/^Not/d;/:/!d'  | cut -d ":" -f1)
 
     if [ -n "$var" ]; then
-        echo -e "All available updates: $var \n"
+        echo -e "All available updates:"
+        echo -e "$var \n"
 
         for caskItem in $var; do
             cask-info "$caskItem"
