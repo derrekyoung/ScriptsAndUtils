@@ -1,8 +1,8 @@
 #!/bin/bash
 
 ################################################################################
-#   Does a mass upgrade of your Homebrew apps and allows you to select which
-#   Cask apps to upgrade.
+#   Does a mass upgrade of your Homebrew apps and allows you to interactively
+#   select which Cask apps to upgrade.
 #
 #   Author: Derrek Young, derrekyoung.com
 #   Requirements:
@@ -11,12 +11,34 @@
 #
 ################################################################################
 
+# Will exclude these apps from updating. Modify these to suite your needs. Use the exact brew/cask name and separate names with a pipe |
+BREW_EXCLUDES="ant|typesafe-activator"
+CASK_EXCLUDES="firefox"
+
+cleanup-all() {
+    echo -e "Cleaning up..."
+    brew update && brew cleanup && brew cask cleanup
+    echo -e "Clean finished.\n\n"
+}
+
 # Upgrade all the Homebrew apps
 brew-upgrade-main() {
-    # Upgrade the Homebrew apps
-    brew update && brew cleanup && brew list | xargs brew upgrade
+    echo -e "Updating Brew apps... \n"
 
-    echo "Brew upgrade finished."
+    var=$(brew list)
+
+    if [ -n "$var" ]; then
+        for item in $var; do
+            [[ $item =~ ^($BREW_EXCLUDES)$ ]] && echo "Automatically excluding $item" && continue
+
+            echo "Upgrading $item"
+            brew upgrade $item
+        done
+    else
+      echo -e "All Brew cellars are up to date  ¯\_(ツ)_/¯ \n"
+    fi
+
+    echo -e "Brew upgrade finished.\n\n"
 }
 
 # Get info for a single cask
@@ -83,7 +105,9 @@ cask-upgrade-menu() {
 
 # Selectively upgrade casks
 cask-upgrade-main() {
-    brew update && brew cask cleanup
+    echo -e "Updating Cask apps... \n"
+
+    # brew update && brew cask cleanup
 
     var=$( cask-lookup  | grep -B 3 'Not installed' | sed -e '/^http/d;/^Not/d;/:/!d'  | cut -d ":" -f1)
 
@@ -92,6 +116,8 @@ cask-upgrade-main() {
         echo -e "$var \n"
 
         for caskItem in $var; do
+            [[ $caskItem =~ ^($CASK_EXCLUDES)$ ]] && echo "Automatically excluding $caskItem" && continue
+
             cask-info "$caskItem"
 
             cask-upgrade-menu "$caskItem"
@@ -100,8 +126,10 @@ cask-upgrade-main() {
       echo -e "All casks are up to date  ¯\_(ツ)_/¯ \n"
     fi
 
-    echo "Cask upgrade finished."
+    echo -e "Cask upgrade finished.\n"
 }
+
+cleanup-all
 
 brew-upgrade-main
 
