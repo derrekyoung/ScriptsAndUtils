@@ -1,5 +1,17 @@
 #!/bin/bash
 
+################################################################################
+#  Does a mass upgrade of your Homebrew apps and allows you to interactively
+#  select which Cask apps to upgrade.
+#
+#  ./brew-cask-upgrade.sh "<BREW_EXCLUDES>" "<CASK_EXCLUDES>"
+#
+#  Requirements:
+#       Homebrew http://brew.sh/
+#       Cask https://caskroom.github.io/
+#
+################################################################################
+
 # Will exclude these apps from updating. Modify these to suite your needs. Use the exact brew/cask name and separate names with a pipe |
 BREW_EXCLUDES="${1:-}"
 CASK_EXCLUDES="${2:-}"
@@ -30,68 +42,6 @@ brew-upgrade-main() {
     echo -e "Brew upgrade finished.\n\n"
 }
 
-# Get info for a single cask
-cask-info() {
-    echo -e "Installed versions of $1: "; ls /usr/local/Caskroom/$1
-
-    info=$(brew cask info $1)
-    IFS=$'\n' lines=($info)
-
-    echo "Available cask info for ${lines[1]}, ${lines[0]}"
-}
-
-# Get info for all casks
-cask-lookup() {
-    for c in $(brew cask list); do
-        brew cask info $c
-    done
-}
-
-# List info for every Cask installed. (This is kind of noisy.)
-cask-list() {
-    for c in $(brew cask list); do
-        echo -e "Installed versions of $c: "
-        ls /usr/local/Caskroom/$c
-
-        info=$(brew cask info $c)
-        IFS=$'\n' lines=($info)
-
-        echo "Available cask info for ${lines[1]}, ${lines[0]}"
-        echo " "
-    done
-}
-
-# Menu to selectively upgrade available casks
-cask-upgrade-menu() {
-    local caskItem="$1"
-
-    echo "Install update for $caskItem?"
-    select yn in Update Skip ; do
-        case $yn in
-            Update)
-                echo "Updating $caskItem..."
-
-                echo "Uninstalling $caskItem"
-                brew cask uninstall --force "$caskItem"
-
-                echo "Re-installing $caskItem"
-                brew cask install "$caskItem"
-
-                echo -e "$caskItem finished. \n"
-
-                break
-                ;;
-            Skip)
-                echo -e "Skipping $caskItem... \n"
-                break
-                ;;
-            *)
-                echo "Please choose 1 or 2"
-                ;;
-        esac
-    done
-}
-
 # Selectively upgrade casks
 cask-upgrade-main() {
     echo -e "Updating Cask apps... \n"
@@ -113,7 +63,8 @@ cask-upgrade-main() {
         printf "%-40s | %-20s | %-20s\n" "$CASK_NAME" "$NEW_VERSION" "$CURRENT_VERSION_INSTALLED"
 
         if [[ "$CURRENT_VERSION_INSTALLED" == "install" ]]; then
-            brew cask install "$CASK_NAME"  --force
+            brew cask install "$CASK_NAME" --force
+            # echo ""
         fi
 
         NEW_VERSION=""
@@ -125,8 +76,8 @@ cask-upgrade-main() {
     echo -e "Cask upgrade finished.\n"
 }
 
-#cleanup-all
+cleanup-all
 
-#brew-upgrade-main
+brew-upgrade-main
 
 cask-upgrade-main
