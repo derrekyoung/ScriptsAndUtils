@@ -1,16 +1,19 @@
 Scripts and Utilities
 ========
 
-random scripts for your pleasure...
+Random scripts for your pleasure...
 
 Scripts
 --------
 
-1. force cleanup and upgrade of all brew casks, pass parameters to exclude packages
+# brew-cask-upgrade.sh
+Force cleanup and upgrade of all brew casks, pass parameters to exclude packages
 ```bash
 ./brew-cask-upgrade.sh "<BREW_EXCLUDES>" "<CASK_EXCLUDES>"
 ```
-2. Script to recursively search a directory and batch convert all files of a given file type into another file type via HandBrake conversion. Set the properties at the top of the script.
+
+# handbrake-batchconvert.sh
+Script to recursively search a directory and batch convert all files of a given file type into another file type via HandBrake conversion. Set the properties at the top of the script.
 ```bash
 ./handbrake-batchconvert.sh
 ```
