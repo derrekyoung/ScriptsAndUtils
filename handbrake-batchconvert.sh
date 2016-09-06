@@ -1,5 +1,21 @@
 #!/bin/sh
 
+###############################################################################
+#
+# Script to recursively search a directory and batch convert all files of a given
+# file type into another file type via HandBrake conversion.
+#
+# To run in your environment set the variables:
+#   hbcli - Path to your HandBrakeCLI
+#
+#   dirs - Array of starting directories for recursive search
+#
+#   input_file_type - Input file type to search for
+#
+#   output_file_type  - Output file type to convert into
+#
+###############################################################################
+
 hbcli=/Applications/HandBrakeCLI/HandBrakeCLI
 input_file_type="avi"
 output_file_type="m4v"
@@ -7,8 +23,11 @@ output_file_type="m4v"
 dirs=( '/dir1'
        '/dir2' )
 
-echo "# Using HandBrakeCLI at "$hbcli
-echo "# Converting "$input_file_type" to "$output_file_type
+
+###############################################################################
+
+echo "# Using HandBrakeCLI at $hbcli"
+echo "# Converting $input_file_type to $output_file_type"
 
 # Convert from one file to another
 convert() {
@@ -36,7 +55,7 @@ do
 
 	if [ $? != 0 ]
         then
-            echo "$in_file had problems" >> handbrake-errors.log  
+            echo "$in_file had problems" >> handbrake-errors.log
         fi
 
 	echo ">Finished "$out_file "\n\n"
