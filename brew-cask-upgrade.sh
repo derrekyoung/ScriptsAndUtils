@@ -1,19 +1,8 @@
 #!/bin/bash
 
-################################################################################
-#   Does a mass upgrade of your Homebrew apps and allows you to interactively
-#   select which Cask apps to upgrade.
-#
-#   Author: Derrek Young, derrekyoung.com
-#   Requirements:
-#       Homebrew http://brew.sh/
-#       Cask https://caskroom.github.io/
-#
-################################################################################
-
 # Will exclude these apps from updating. Modify these to suite your needs. Use the exact brew/cask name and separate names with a pipe |
-BREW_EXCLUDES="ant|typesafe-activator"
-CASK_EXCLUDES="firefox"
+BREW_EXCLUDES="${1:-}"
+CASK_EXCLUDES="${2:-}"
 
 cleanup-all() {
     echo -e "Cleaning up..."
@@ -35,7 +24,7 @@ brew-upgrade-main() {
             brew upgrade $item
         done
     else
-      echo -e "All Brew cellars are up to date  ¯\_(ツ)_/¯ \n"
+      echo -e "All Brew cellars are up to date \n"
     fi
 
     echo -e "Brew upgrade finished.\n\n"
@@ -93,7 +82,7 @@ cask-upgrade-menu() {
                 break
                 ;;
             Skip)
-                echo -e "Skipping $caskItem... (╯°□°)╯︵ ┻━┻ \n"
+                echo -e "Skipping $caskItem... \n"
                 break
                 ;;
             *)
@@ -107,30 +96,37 @@ cask-upgrade-menu() {
 cask-upgrade-main() {
     echo -e "Updating Cask apps... \n"
 
-    # brew update && brew cask cleanup
+    echo -e "Checking all cask versions \n"
+    printf '=%.0s' {1..82}
+    printf '\n'
+    printf "%-40s | %-20s | %-5s\n" "CASK NAME" "LATEST VERSION" "LATEST INSTALLED"
+    printf '=%.0s' {1..82}
+    printf '\n'
 
-    var=$( cask-lookup  | grep -B 3 'Not installed' | sed -e '/^http/d;/^Not/d;/:/!d'  | cut -d ":" -f1)
+    for c in $(brew cask list); do
+        CASK_INFO=$(brew cask info $c)
 
-    if [ -n "$var" ]; then
-        echo -e "All available updates:"
-        echo -e "$var \n"
+        CASK_NAME=$(echo "$c" | cut -d ":" -f1 | xargs)
+        NEW_VERSION=$(echo "$CASK_INFO" | grep -e "$CASK_NAME: .*" | cut -d ":" -f2 | sed 's/ *//' )
+        CURRENT_VERSION_INSTALLED=$(echo "$CASK_INFO" | grep -q ".*/Caskroom/$CASK_NAME/$NEW_VERSION.*" 2>&1 && echo true || if [[ ${CASK_EXCLUDES} != *"$CASK_NAME"* ]]; then echo "install"; else echo "excluded"; fi )
 
-        for caskItem in $var; do
-            [[ $caskItem =~ ^($CASK_EXCLUDES)$ ]] && echo "Automatically excluding $caskItem" && continue
+        printf "%-40s | %-20s | %-20s\n" "$CASK_NAME" "$NEW_VERSION" "$CURRENT_VERSION_INSTALLED"
 
-            cask-info "$caskItem"
+        if [[ "$CURRENT_VERSION_INSTALLED" == "install" ]]; then
+            brew cask install "$CASK_NAME"  --force
+        fi
 
-            cask-upgrade-menu "$caskItem"
-        done
-    else
-      echo -e "All casks are up to date  ¯\_(ツ)_/¯ \n"
-    fi
+        NEW_VERSION=""
+        CURRENT_VERSION=""
+        CASK_INFO=""
+    done
+
 
     echo -e "Cask upgrade finished.\n"
 }
 
-cleanup-all
+#cleanup-all
 
-brew-upgrade-main
+#brew-upgrade-main
 
 cask-upgrade-main
