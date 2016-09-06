@@ -23,7 +23,7 @@ cleanup-all() {
 }
 
 # Upgrade all the Homebrew apps
-brew-upgrade-main() {
+brew-upgrade() {
     echo -e "Updating Brew apps... \n"
 
     var=$(brew list)
@@ -43,7 +43,7 @@ brew-upgrade-main() {
 }
 
 # Selectively upgrade casks
-cask-upgrade-main() {
+cask-upgrade() {
     echo -e "Updating Cask apps... \n"
 
     echo -e "Checking all cask versions \n"
@@ -78,6 +78,6 @@ cask-upgrade-main() {
 
 cleanup-all
 
-brew-upgrade-main
+brew-upgrade
 
-cask-upgrade-main
+cask-upgrade
