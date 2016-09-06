@@ -10,7 +10,7 @@ Scripts
 ```bash
 ./brew-cask-upgrade.sh "<BREW_EXCLUDES>" "<CASK_EXCLUDES>"
 ```
-2. Script to recursively search a directory and batch convert all files of a given file type into another file type via HandBrake conversion.
+2. Script to recursively search a directory and batch convert all files of a given file type into another file type via HandBrake conversion. Set the properties at the top of the script.
 ```bash
 ./handbrake-batchconvert.sh
 ```
