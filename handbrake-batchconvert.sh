@@ -7,18 +7,12 @@
 #
 # To run in your environment set the variables:
 #   hbcli - Path to your HandBrakeCLI
-#	
+#
 #   dirs - Array of starting directories for recursive search
-#	
+#
 #   input_file_type - Input file type to search for
-#	
+#
 #   output_file_type  - Output file type to convert into
-#
-#
-# Change log:
-# 2012-01-08: Initial release.  Tested on Mac OS X Lion.
-# 2012-02-09: Added ability to process multiple directories.
-# 2012-02-12: Added default system beep to signal end of all processing. 
 #
 ###############################################################################
 
@@ -29,8 +23,11 @@ output_file_type="m4v"
 dirs=( '/dir1'
        '/dir2' )
 
-echo "# Using HandBrakeCLI at "$hbcli
-echo "# Converting "$input_file_type" to "$output_file_type
+
+###############################################################################
+
+echo "# Using HandBrakeCLI at $hbcli"
+echo "# Converting $input_file_type to $output_file_type"
 
 # Convert from one file to another
 convert() {
@@ -58,7 +55,7 @@ do
 
 	if [ $? != 0 ]
         then
-            echo "$in_file had problems" >> handbrake-errors.log  
+            echo "$in_file had problems" >> handbrake-errors.log
         fi
 
 	echo ">Finished "$out_file "\n\n"
