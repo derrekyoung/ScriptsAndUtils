@@ -7,7 +7,7 @@ Scripts
 --------
 
 # brew-cask-upgrade.sh
-Force cleanup and upgrade of all brew casks, pass parameters to exclude packages
+Force cleanup and upgrade of all brew casks, pass parameters to exclude packages. (Separate excludes with a pipe | )
 ```bash
 ./brew-cask-upgrade.sh "<BREW_EXCLUDES>" "<CASK_EXCLUDES>"
 ```
