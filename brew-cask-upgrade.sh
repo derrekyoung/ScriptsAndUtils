@@ -542,9 +542,8 @@ function unset_variables() {
 }
 
 function start_sudo() {
-    #${USE_PASSWORD} | builtin command sudo -p '' -S -v
-    sudo -v
-    ( while true; do sudo -v; sleep 60; done; ) &
+    ${USE_PASSWORD} | builtin command sudo -p '' -S -v
+    ( while true; do ${USE_PASSWORD} | builtin command sudo -p '' -S -v; sleep 60; done; ) &
     SUDO_PID="$!"
 }
 
@@ -555,7 +554,7 @@ function stop_sudo() {
     else
         if ps -p $SUDO_PID > /dev/null
         then
-            kill -9 $SUDO_PID
+            sudo kill -9 $SUDO_PID &> /dev/null
             wait $SUDO_PID 2>/dev/null
         else
             :
