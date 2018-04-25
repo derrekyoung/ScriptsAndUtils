@@ -236,9 +236,14 @@ cleanup-all-parallel() {
         CASK_TO_CLEAN=""
     done <"$TMP_DIR_CASK_VERSIONS"/"$DATE_LIST_FILE_CASK_VERSIONS"
 
-    #
     # checking if more than version is installed by using
     # brew cask list --versions
+    
+    # fixing red dots before confirming commit to cask-repair that prevent the commit from being made
+    # https://github.com/vitorgalvao/tiny-scripts/issues/88
+    sudo gem uninstall -ax rubocop rubocop-cask 1> /dev/null
+    brew cask style 1> /dev/null
+    
     #echo ''
     echo 'cleaning finished ;)'
 }
@@ -636,6 +641,23 @@ cask-install-updates() {
     sort "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASK" -o "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASK"
     
     start_sudo
+    applications_to_reinstall=(
+    "adobe-acrobat-reader"
+    )
+    for i in "${applications_to_reinstall[@]}"
+    do
+    	if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASK" | grep "$i") != "" ]]
+    	then
+            echo 'updating '"$i"'...'
+            ${USE_PASSWORD} | brew cask reinstall "$i"
+            #sed -i "" "/""$i""/d" "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASK"
+            sed -i '' '/'"$i"'/d' "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASK"
+            echo ''
+    	else
+    		:
+    	fi
+    done
+
     # updating all casks that are out of date
     while IFS='' read -r line || [[ -n "$line" ]]
     do
@@ -710,18 +732,29 @@ echo ''
 echo -e "\033[1mupdating homebrew, formulas and casks...\033[0m"
 echo ''
 
-# trapping script to kill subprocesses when script is stopped
-# kill -9 can only be silenced with >/dev/null 2>&1 when wrappt into function
 function kill_subprocesses() 
 {
-# kills subprocesses only
-pkill -9 -P $$
+    # kills only subprocesses of the current process
+    #pkill -15 -P $$
+    #kill -15 $(pgrep -P $$)
+    
+    # kills all descendant processes incl. process-children and process-grandchildren
+    # option 1
+    RUNNING_SUBPROCESSES=$(pgrep -g $(ps -o pgid= $$))
+    kill -15 $RUNNING_SUBPROCESSES
+    wait $RUNNING_SUBPROCESSES 2>/dev/null
+    # option 2
+    #{ kill -15 $RUNNING_SUBPROCESSES && wait $RUNNING_SUBPROCESSES; } >/dev/null 2>&1
+    # option 3
+    #kill -13 $RUNNING_SUBPROCESSES
+    unset RUNNING_SUBPROCESSES
 }
 
 function kill_main_process() 
 {
-# kills subprocesses and process itself
-exec pkill -9 -P $$
+    # kills processes itself
+    #kill $$
+    kill -13 $$
 }
 
 function unset_variables() {
@@ -762,7 +795,7 @@ function stop_sudo() {
 #trap "unset SUDOPASSWORD; printf '\n'; echo 'killing subprocesses...'; kill_subprocesses >/dev/null 2>&1; echo 'done'; echo 'killing main process...'; kill_main_process" SIGHUP SIGINT SIGTERM
 trap "unset_variables; printf '\n'; kill_subprocesses >/dev/null 2>&1; kill_main_process" SIGHUP SIGINT SIGTERM
 # kill main process only if it hangs on regular exit
-trap "unset_variables; kill_subprocesses >/dev/null 2>&1; exit; kill_main_process" EXIT
+trap "unset_variables; kill_subprocesses >/dev/null 2>&1; exit" EXIT
 #set -e
 
 # creating directory and adjusting permissions
@@ -831,16 +864,31 @@ then
     # keeping homebrew from updating each time brew install is used
     export HOMEBREW_NO_AUTO_UPDATE=1
     
-    # checking if all dependencies are installed
+    # checking if all script dependencies are installed
     echo ''
-    echo "checking dependencies..."
+    echo "checking for script dependencies..."
     if [[ $(brew list | grep jq) == '' ]] || [[ $(brew list | grep parallel) == '' ]]
     then
-        echo "not all dependencies installed, installing..."
+        echo "not all script dependencies installed, installing..."
         ${USE_PASSWORD} | brew install jq parallel
     else
-        echo "all dependencies installed..."
+        echo "all script dependencies installed..."
     fi
+    
+    # checking if all formula dependencies are installed
+    #echo ''
+    echo "checking for formula dependencies..."
+    if [[ $(brew missing) == "" ]]
+    then
+    	echo "all formula dependencies installed..."
+    	:
+    else
+    	echo "not all formula dependencies installed, installing..."
+    	brew install $(brew missing | awk '{print $NF}' | awk '!a[$0]++')
+    	# or 
+    	#brew install $(brew missing | awk '{print $NF}' | sort | uniq)
+    fi
+    #echo ''
     
     # will exclude these apps from updating
     # pass in params to fit your needs
