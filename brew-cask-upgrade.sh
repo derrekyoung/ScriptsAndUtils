@@ -121,6 +121,9 @@ cleanup-all-homebrew-only() {
     echo "cleaning up..."
     #brew cleanup
     brew cleanup 1> /dev/null
+    brew cleanup --prune=0 1> /dev/null
+    # should do the same withou output, but just to make sure              
+    rm -rf $(brew --cache)
     # brew cask cleanup is deprecated from 2018-09
     #brew cask cleanup
     #brew cask cleanup 1> /dev/null
@@ -132,6 +135,9 @@ cleanup-all-parallel() {
     echo "cleaning up..."
     #brew cleanup
     brew cleanup 1> /dev/null
+    brew cleanup --prune=0 1> /dev/null
+    # should do the same withou output, but just to make sure              
+    rm -rf $(brew --cache)
     # brew cask cleanup is deprecated from 2018-09
     #brew cask cleanup
     #brew cask cleanup 1> /dev/null
@@ -256,6 +262,9 @@ cleanup-all-one-by-one() {
     echo "cleaning up..."
     #brew cleanup
     brew cleanup 1> /dev/null
+    brew cleanup --prune=0 1> /dev/null
+    # should do the same withou output, but just to make sure              
+    rm -rf $(brew --cache)
     # brew cask cleanup is deprecated from 2018-09
     #brew cask cleanup
     #brew cask cleanup 1> /dev/null
@@ -525,8 +534,8 @@ brew-install-updates() {
     if [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "ffmpeg") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "fdk-aac") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "sdl2") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "freetype") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "libass") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "libvorbis") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "libvpx") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "opus") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "x265") != "" ]]
     then
         echo "rebuilding ffmpeg due to components updates..."
-        ${USE_PASSWORD} | brew reinstall ffmpeg --with-fdk-aac --with-sdl2 --with-freetype --with-libass --with-libvorbis --with-libvpx --with-opus --with-x265
-        if [[ $(ffmpeg -codecs 2>&1 | grep "\-\-enable-x265") == "" ]]
+        #${USE_PASSWORD} | brew reinstall ffmpeg --with-fdk-aac --with-sdl2 --with-freetype --with-libass --with-libvorbis --with-libvpx --with-opus --with-x265
+        if [[ $(ffmpeg -codecs 2>&1 | grep "\-\-enable-libx265") == "" ]]
         then
             ${USE_PASSWORD} | HOMEBREW_DEVELOPER=1 brew reinstall --build-from-source ffmpeg --with-fdk-aac --with-sdl2 --with-freetype --with-libass --with-libvorbis --with-libvpx --with-opus --with-x265
         else
@@ -1080,11 +1089,11 @@ then
         echo "homebrew formulas path is empty or does not exist, exiting script..."
         exit
     else
-        :
+        echo "homebrew formulas are located in "$BREW_FORMULAS_PATH""
     fi
-    echo "homebrew formulas are located in "$BREW_FORMULAS_PATH""
+
     #
-    BREW_CASKS_PATH=$(brew cask doctor | grep -A1 -B1 "Homebrew-Cask Staging Location" | tail -1)
+    BREW_CASKS_PATH=$(brew cask doctor | grep -A1 -B1 "Cask Staging Location" | tail -1)
     export BREW_CASKS_PATH
     if [[ $(echo "$BREW_CASKS_PATH") == "" || ! -e "$BREW_CASKS_PATH" ]]
     then
@@ -1092,9 +1101,8 @@ then
         HOMEBREW_CASK_IS_INSTALLED="no"
     else
         HOMEBREW_CASK_IS_INSTALLED="yes"
-        :
+        echo "homebrew casks are located in "$BREW_CASKS_PATH""
     fi
-    echo "homebrew casks are located in "$BREW_CASKS_PATH""
     #echo ''
     
     sudo()
