@@ -116,24 +116,150 @@ homebrew-update() {
     echo 'updating homebrew finished ;)'
 }
 
-cleanup-all-homebrew-only() {
-    echo ''
-    echo "cleaning up..."
-    #brew cleanup
-    #brew cask cleanup
-    brew cleanup 1> /dev/null
-    brew cask cleanup 1> /dev/null
-    echo 'cleaning finished ;)'
+number-of-parallel-processes() {
+    NUMBER_OF_CORES=$(parallel --number-of-cores)
+    NUMBER_OF_MAX_JOBS=$(echo "$NUMBER_OF_CORES * 2.5" | bc -l)
+    #echo $NUMBER_OF_MAX_JOBS
+    NUMBER_OF_MAX_JOBS_ROUNDED=$(awk 'BEGIN { printf("%.0f\n", '"$NUMBER_OF_MAX_JOBS"'); }')
+    #echo $NUMBER_OF_MAX_JOBS_ROUNDED
+    NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED=$(echo "$NUMBER_OF_MAX_JOBS_ROUNDED * 2.0" | bc -l)
+    #echo $NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED
+    NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED_ROUNDED=$(awk 'BEGIN { printf("%.0f\n", '"$NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED"'); }')
+    #echo $NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED_ROUNDED
 }
 
-cleanup-all-parallel() {
-    echo ''
-    echo "cleaning up..."
+cleanup-all-homebrew() {
     #brew cleanup
-    #brew cask cleanup
     brew cleanup 1> /dev/null
-    brew cask cleanup 1> /dev/null
+    brew cleanup --prune=0 1> /dev/null
+    # should do the same withou output, but just to make sure              
+    rm -rf $(brew --cache)
+    # brew cask cleanup is deprecated from 2018-09
+    #brew cask cleanup
+    #brew cask cleanup 1> /dev/null
     
+    # fixing red dots before confirming commit to cask-repair that prevent the commit from being made
+    # https://github.com/vitorgalvao/tiny-scripts/issues/88
+    sudo gem uninstall -ax rubocop rubocop-cask 1> /dev/null
+    brew cask style 1> /dev/null
+}
+
+cleanup-formulae-parallel() {
+    TMP_DIR_FORMULAE_VERSIONS=/tmp/formulae_versions
+    export TMP_DIR_FORMULAE_VERSIONS
+    if [ -e "$TMP_DIR_FORMULAE_VERSIONS" ]
+    then
+        if [ "$(ls -A $TMP_DIR_FORMULAE_VERSIONS/)" ]
+        then
+            rm "$TMP_DIR_FORMULAE_VERSIONS"/*    
+        else
+            :
+        fi
+    else
+        :
+    fi
+    mkdir -p "$TMP_DIR_FORMULAE_VERSIONS"/
+    DATE_LIST_FILE_FORMULAE_VERSIONS=$(echo "formulae_versions"_$(date +%Y-%m-%d_%H-%M-%S).txt)
+    export DATE_LIST_FILE_FORMULAE_VERSIONS
+    touch "$TMP_DIR_FORMULAE_VERSIONS"/"$DATE_LIST_FILE_FORMULAE_VERSIONS"
+    
+    formulae_check_for_multiple_installed_versions() {
+        local item="$1"
+        local BREW_INFO=$(brew info $item)
+        local BREW_NAME=$(echo "$BREW_INFO" | grep -e "$item: .*" | cut -d" " -f1 | sed 's/://g' | awk '{print $NF}' FS=/)
+        local BREW_REVISION=$(brew info "$item" --json=v1 | jq . | grep revision | grep -o '[0-9]')
+        if [[ "$BREW_REVISION" == "0" ]]
+        then
+            local NEW_VERSION=$(echo "$BREW_INFO" | grep -e "$item: .*" | cut -d" " -f3 | sed 's/,//g')
+        else
+            local NEW_VERSION=$(echo $(echo "$BREW_INFO" | grep -e "$item: .*" | cut -d" " -f3 | sed 's/,//g')_"$BREW_REVISION")
+        fi
+        local INSTALLED_VERSIONS=$(ls -1 "$BREW_FORMULAS_PATH"/"$item" | sort -V)
+        local NUMBER_OF_INSTALLED_VERSIONS=$(echo "$INSTALLED_VERSIONS" | wc -l | sed -e 's/^[ \t]*//') 
+        
+        if [[ "$NUMBER_OF_INSTALLED_VERSIONS" -gt "1" ]]
+        then
+            echo -e "$NUMBER_OF_INSTALLED_VERSIONS\t$BREW_NAME" >> "$TMP_DIR_FORMULAE_VERSIONS"/"$DATE_LIST_FILE_FORMULAE_VERSIONS"
+        else
+            :
+        	#echo "only one version installed..."
+        fi 
+
+        BREW_INFO=""
+        BREW_NAME=""
+        NEW_VERSION=""
+        INSTALLED_VERSIONS=""
+        NUMBER_OF_INSTALLED_VERSIONS=""
+    }
+    export -f formulae_check_for_multiple_installed_versions
+    
+    parallel --will-cite -P "$NUMBER_OF_MAX_JOBS_ROUNDED" -k formulae_check_for_multiple_installed_versions ::: "$(brew list)"
+    wait
+    
+    sort "$TMP_DIR_FORMULAE_VERSIONS"/"$DATE_LIST_FILE_FORMULAE_VERSIONS" -o "$TMP_DIR_FORMULAE_VERSIONS"/"$DATE_LIST_FILE_FORMULAE_VERSIONS"
+
+    while IFS='' read -r line || [[ -n "$line" ]]
+    do
+            FORMULA_TO_CLEAN=$(echo "$line" | awk '{print $2}')
+            #echo ''
+        	#echo "$(echo "$line" | awk '{print $1}') versions of $CASK_TO_CLEAN are installed..."
+        	#echo "uninstalling all outdated versions..."
+        	if [[ -e "$BREW_FORMULAS_PATH"/"$FORMULA_TO_CLEAN" ]]
+        	then
+        	    # uninstall old versions
+        	    local BREW_INFO=$(brew info "$FORMULA_TO_CLEAN")
+                #local BREW_NAME=$(echo "$BREW_INFO" | grep -e "$FORMULA_TO_CLEAN: .*" | cut -d" " -f1 | sed 's/://g' | awk '{print $NF}' FS=/)
+                local BREW_NAME="$FORMULA_TO_CLEAN"
+                local BREW_REVISION=$(brew info "$FORMULA_TO_CLEAN" --json=v1 | jq . | grep revision | grep -o '[0-9]')
+                if [[ "$BREW_REVISION" == "0" ]]
+                then
+                    local NEW_VERSION=$(echo "$BREW_INFO" | grep -e "$FORMULA_TO_CLEAN: .*" | cut -d" " -f3 | sed 's/,//g')
+                else
+                    local NEW_VERSION=$(echo $(echo "$BREW_INFO" | grep -e "$FORMULA_TO_CLEAN: .*" | cut -d" " -f3 | sed 's/,//g')_"$BREW_REVISION")
+                fi
+        	    local INSTALLED_VERSIONS=$(ls -1 "$BREW_FORMULAS_PATH"/"$FORMULA_TO_CLEAN" | sort -V)
+        	    local NEWEST_INSTALLED_VERSION=$(echo "$INSTALLED_VERSIONS" | tail -n 1)
+        	    #local VERSIONS_TO_UNINSTALL=$(echo "$INSTALLED_VERSIONS" | grep -v "$NEW_VERSION")
+        	    # alternatively always keep latest version installed and not the latest version from homebrew
+        	    local VERSIONS_TO_UNINSTALL=$(echo "$INSTALLED_VERSIONS" | grep -v "$NEWEST_INSTALLED_VERSION")
+        	    for i in $VERSIONS_TO_UNINSTALL
+                do
+                    #echo $i
+                    # deleting version entry
+                    if [[ -e "$BREW_FORMULAS_PATH"/"$FORMULA_TO_CLEAN"/"$i" && $(echo "$i") != "" ]]
+                    then
+                        rm -rf "$BREW_FORMULAS_PATH"/"$FORMULA_TO_CLEAN"/"$i"
+                    else
+                        :
+                    fi
+                    # deleting metadata version entry
+                    if [[ -e "$BREW_FORMULAS_PATH"/"$FORMULA_TO_CLEAN"/.metadata/"$i" && $(echo "$i") != "" ]]
+                    then
+                        rm -rf "$BREW_FORMULAS_PATH"/"$FORMULA_TO_CLEAN"/.metadata/"$i"
+                    else
+                        :
+                    fi
+                done
+        	else
+        	    :
+        	fi
+        #
+        BREW_INFO=""
+        BREW_NAME=""
+        NEW_VERSION=""
+        INSTALLED_VERSIONS=""
+        VERSIONS_TO_UNINSTALL=""
+        FORMULA_TO_CLEAN=""
+    done <"$TMP_DIR_FORMULAE_VERSIONS"/"$DATE_LIST_FILE_FORMULAE_VERSIONS"
+
+    # checking if more than version is installed by using
+    # brew list --versions
+    
+    #echo ''
+    #echo 'cleaning finished ;)'
+}
+
+cleanup-casks-parallel() {
     TMP_DIR_CASK_VERSIONS=/tmp/cask_versions
     export TMP_DIR_CASK_VERSIONS
     if [ -e "$TMP_DIR_CASK_VERSIONS" ]
@@ -172,21 +298,10 @@ cleanup-all-parallel() {
         CASK_NAME=""
         NEW_VERSION=""
         INSTALLED_VERSIONS=""
+        NUMBER_OF_INSTALLED_VERSIONS=""
     }
-
-    #
-    local NUMBER_OF_CORES=$(parallel --number-of-cores)
-    local NUMBER_OF_MAX_JOBS=$(echo "$NUMBER_OF_CORES * 1.5" | bc -l)
-    #echo $NUMBER_OF_MAX_JOBS
-    local NUMBER_OF_MAX_JOBS_ROUNDED=$(awk 'BEGIN { printf("%.0f\n", '"$NUMBER_OF_MAX_JOBS"'); }')
-    #echo $NUMBER_OF_MAX_JOBS_ROUNDED
-    local NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED=$(echo "$NUMBER_OF_MAX_JOBS_ROUNDED * 2.0" | bc -l)
-    #echo $NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED
-    local NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED_ROUNDED=$(awk 'BEGIN { printf("%.0f\n", '"$NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED"'); }')
-    #echo $NUMBER_OF_MAX_JOBS_ROUNDED_DOUBLED_ROUNDED
-    #
     export -f cask_check_for_multiple_installed_versions
-    #
+
     parallel --will-cite -P "$NUMBER_OF_MAX_JOBS_ROUNDED" -k cask_check_for_multiple_installed_versions ::: "$(brew cask list)"
     wait
     
@@ -205,7 +320,10 @@ cleanup-all-parallel() {
                 local CASK_NAME=$(echo "$CASK_TO_CLEAN" | cut -d ":" -f1 | xargs)
                 local NEW_VERSION=$(echo "$CASK_INFO" | grep -e "$CASK_NAME: .*" | cut -d ":" -f2 | head -1 | sed 's|(auto_updates)||g' | sed 's/^ *//' | sed 's/ *$//')
         	    local INSTALLED_VERSIONS=$(ls -1 "$BREW_CASKS_PATH"/"$CASK_TO_CLEAN" | sort -V)
-        	    local VERSIONS_TO_UNINSTALL=$(echo "$INSTALLED_VERSIONS" | grep -v "$NEW_VERSION")
+        	    local NEWEST_INSTALLED_VERSION=$(echo "$INSTALLED_VERSIONS" | tail -n 1)
+        	    #local VERSIONS_TO_UNINSTALL=$(echo "$INSTALLED_VERSIONS" | grep -v "$NEW_VERSION")
+        	    # alternatively always keep latest version installed and not the latest version from homebrew
+        	    local VERSIONS_TO_UNINSTALL=$(echo "$INSTALLED_VERSIONS" | grep -v "$NEWEST_INSTALLED_VERSION")
         	    for i in $VERSIONS_TO_UNINSTALL
                 do
                     #echo $i
@@ -245,16 +363,20 @@ cleanup-all-parallel() {
     brew cask style 1> /dev/null
     
     #echo ''
-    echo 'cleaning finished ;)'
+    #echo 'cleaning finished ;)'
 }
 
 cleanup-all-one-by-one() {
     echo ''
     echo "cleaning up..."
     #brew cleanup
-    #brew cask cleanup
     brew cleanup 1> /dev/null
-    brew cask cleanup 1> /dev/null
+    brew cleanup --prune=0 1> /dev/null
+    # should do the same withou output, but just to make sure              
+    rm -rf $(brew --cache)
+    # brew cask cleanup is deprecated from 2018-09
+    #brew cask cleanup
+    #brew cask cleanup 1> /dev/null
     #
     for i in $(brew cask list)
     do
@@ -363,8 +485,9 @@ brew_show_updates_parallel() {
         local NUMBER_OF_INSTALLED_FORMULAS=$(echo "$INSTALLED_FORMULAS" | wc -l | sed 's/^ *//' | sed 's/ *$//')
         local NUMBER_OF_FORMULA=$(echo "$INSTALLED_FORMULAS" | cat -n | grep "$item$" | awk '{print $1}' | sed 's/^ *//' | sed 's/ *$//')
         local INSTALLED_VERSIONS=$(ls -1 "$BREW_FORMULAS_PATH"/"$item" | sort -V)
-        #echo INSTALLED_VERSIONS is $INSTALLED_VERSIONS
-        local NEWEST_INSTALLED_VERSION=$(echo $INSTALLED_VERSIONS | head -1)
+        #echo INSTALLED_VERSIONS is "$INSTALLED_VERSIONS"
+        local NEWEST_INSTALLED_VERSION=$(echo "$INSTALLED_VERSIONS" | tail -n 1)
+        #echo NEWEST_INSTALLED_VERSION is "$NEWEST_INSTALLED_VERSION"
         local CHECK_RESULT=$(echo "$INSTALLED_VERSIONS" | grep -q "$NEW_VERSION" 2>&1 && echo ok || echo outdated)
         #echo CHECK_RESULT is $CHECK_RESULT
         local NAME_PRINT=$(echo "$BREW_NAME" | awk -v len=20 '{ if (length($0) > len) print substr($0, 1, len-3) "..."; else print; }')
@@ -390,16 +513,8 @@ brew_show_updates_parallel() {
             echo "$BREW_NAME" >> "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW"
         fi
     }
-    
-    #
-    local NUMBER_OF_CORES=$(parallel --number-of-cores)
-    local NUMBER_OF_MAX_JOBS=$(echo "$NUMBER_OF_CORES * 1.5" | bc -l)
-    #echo $NUMBER_OF_MAX_JOBS
-    local NUMBER_OF_MAX_JOBS_ROUNDED=$(awk 'BEGIN { printf("%.0f\n", '"$NUMBER_OF_MAX_JOBS"'); }')
-    #echo $NUMBER_OF_MAX_JOBS_ROUNDED
-    #
     export -f brew_show_updates_parallel_inside
-    #
+    
     parallel --will-cite -P "$NUMBER_OF_MAX_JOBS_ROUNDED" -k brew_show_updates_parallel_inside ::: "$(brew list)"
     wait
         
@@ -456,8 +571,9 @@ brew-show-updates-one-by-one() {
         local NUMBER_OF_INSTALLED_FORMULAS=$(echo "$INSTALLED_FORMULAS" | wc -l | sed 's/^ *//' | sed 's/ *$//')
         local NUMBER_OF_FORMULA=$(echo "$INSTALLED_FORMULAS" | cat -n | grep "$item$" | awk '{print $1}' | sed 's/^ *//' | sed 's/ *$//')
         local INSTALLED_VERSIONS=$(ls -1 "$BREW_FORMULAS_PATH"/"$item" | sort -V)
-        #echo INSTALLED_VERSIONS is $INSTALLED_VERSIONS
-        local NEWEST_INSTALLED_VERSION=$(echo $INSTALLED_VERSIONS | head -1)
+        #echo INSTALLED_VERSIONS is "$INSTALLED_VERSIONS"
+        local NEWEST_INSTALLED_VERSION=$(echo "$INSTALLED_VERSIONS" | tail -n 1)
+        #echo NEWEST_INSTALLED_VERSION is "$NEWEST_INSTALLED_VERSION"
         local CHECK_RESULT=$(echo "$INSTALLED_VERSIONS" | grep -q "$NEW_VERSION" 2>&1 && echo ok || echo outdated)
         #echo CHECK_RESULT is $CHECK_RESULT
         local NAME_PRINT=$(echo "$BREW_NAME" | awk -v len=20 '{ if (length($0) > len) print substr($0, 1, len-3) "..."; else print; }')
@@ -514,10 +630,17 @@ brew-install-updates() {
         echo "installing brew formulas updates finished ;)"
     fi
     # special ffmpeg
+    # versions > 4.0.2_1 include h265 by default, so rebuilding does not seem to be needed any more
     if [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "ffmpeg") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "fdk-aac") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "sdl2") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "freetype") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "libass") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "libvorbis") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "libvpx") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "opus") != "" ]] || [[ $(cat "$TMP_DIR_BREW"/"$DATE_LIST_FILE_BREW" | grep "x265") != "" ]]
     then
-        echo "rebuilding ffmpeg due to components updates..."
-        ${USE_PASSWORD} | brew reinstall ffmpeg --with-fdk-aac --with-sdl2 --with-freetype --with-libass --with-libvorbis --with-libvpx --with-opus --with-x265
+        #${USE_PASSWORD} | brew reinstall ffmpeg --with-fdk-aac --with-sdl2 --with-freetype --with-libass --with-libvorbis --with-libvpx --with-opus --with-x265
+        if [[ $(ffmpeg -codecs 2>&1 | grep "\-\-enable-libx265") == "" ]]
+        then
+            echo "rebuilding ffmpeg due to components updates..."
+            ${USE_PASSWORD} | HOMEBREW_DEVELOPER=1 brew reinstall --build-from-source ffmpeg --with-fdk-aac --with-sdl2 --with-freetype --with-libass --with-libvorbis --with-libvpx --with-opus --with-x265
+        else
+            :
+        fi
     else
         :
     fi
@@ -581,8 +704,9 @@ cask_show_updates_parallel () {
         local NEW_VERSION=$(echo "$CASK_INFO" | grep -e "$CASK_NAME: .*" | cut -d ":" -f2 | head -1 | sed 's|(auto_updates)||g' | sed 's/^ *//' | sed 's/ *$//')
         #echo NEW_VERSION is $NEW_VERSION
         local INSTALLED_VERSIONS=$(ls -1 "$BREW_CASKS_PATH"/"$c" | sort -V)
-        local NEWEST_INSTALLED_VERSION=$(echo $INSTALLED_VERSIONS | head -1)
-        #echo INSTALLED_VERSIONS is $INSTALLED_VERSIONS
+        #echo INSTALLED_VERSIONS is "$INSTALLED_VERSIONS"
+        local NEWEST_INSTALLED_VERSION=$(echo "$INSTALLED_VERSIONS" | tail -n 1)
+        #echo NEWEST_INSTALLED_VERSION is "$NEWEST_INSTALLED_VERSION"
         local CHECK_RESULT=$(echo "$INSTALLED_VERSIONS" | grep -q "$NEW_VERSION" 2>&1 && echo ok || echo outdated)
         #echo CHECK_RESULT is $CHECK_RESULT
         local CASK_NAME_PRINT=$(echo "$CASK_NAME" | awk -v len=20 '{ if (length($0) > len) print substr($0, 1, len-3) "..."; else print; }')
@@ -612,17 +736,8 @@ cask_show_updates_parallel () {
             echo "$CASK_NAME" >> "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASK_LATEST"
         fi
     }
-    
-    #
-    local NUMBER_OF_CORES=$(parallel --number-of-cores)
-    local NUMBER_OF_MAX_JOBS=$(echo "$NUMBER_OF_CORES * 1.5" | bc -l)
-    #echo $NUMBER_OF_MAX_JOBS
-    local NUMBER_OF_MAX_JOBS_ROUNDED=$(awk 'BEGIN { printf("%.0f\n", '"$NUMBER_OF_MAX_JOBS"'); }')
-    #echo $NUMBER_OF_MAX_JOBS_ROUNDED
-    #
     export -f cask_show_updates_parallel_inside
-    #
-    #parallel --will-cite -P "$NUMBER_OF_MAX_JOBS_ROUNDED" -k cask_show_updates_parallel_inside ::: "$(brew cask list)"
+
     parallel --will-cite -P "$NUMBER_OF_MAX_JOBS_ROUNDED" -k cask_show_updates_parallel_inside ::: "$(echo "$INSTALLED_CASKS")"
     wait
         
@@ -679,8 +794,9 @@ cask-show-updates-one-by-one() {
         local NEW_VERSION=$(echo "$CASK_INFO" | grep -e "$CASK_NAME: .*" | cut -d ":" -f2 | head -1 | sed 's|(auto_updates)||g' | sed 's/^ *//' | sed 's/ *$//')
         #echo NEW_VERSION is $NEW_VERSION
         local INSTALLED_VERSIONS=$(ls -1 "$BREW_CASKS_PATH"/"$c" | sort -V)
-        local NEWEST_INSTALLED_VERSION=$(echo $INSTALLED_VERSIONS | head -1)
-        #echo INSTALLED_VERSIONS is $INSTALLED_VERSIONS
+        #echo INSTALLED_VERSIONS is "$INSTALLED_VERSIONS"
+        local NEWEST_INSTALLED_VERSION=$(echo "$INSTALLED_VERSIONS" | tail -n 1)
+        #echo NEWEST_INSTALLED_VERSION is "$NEWEST_INSTALLED_VERSION"
         local CHECK_RESULT=$(echo "$INSTALLED_VERSIONS" | grep -q "$NEW_VERSION" 2>&1 && echo ok || echo outdated)
         #echo CHECK_RESULT is $CHECK_RESULT
         local CASK_NAME_PRINT=$(echo "$CASK_NAME" | awk -v len=20 '{ if (length($0) > len) print substr($0, 1, len-3) "..."; else print; }')
@@ -771,7 +887,8 @@ cask-install-updates() {
     done <"$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASK"
     stop_sudo
     
-    # updating virtualbox-extension-pack if it is outdated
+    ### manual installations after install
+    
     #if [[ "$VIRTUALBOX_EXTENSION_UPDATE_AVAILABLE" == "yes" ]]
     #then
     #    start_sudo
@@ -785,6 +902,14 @@ cask-install-updates() {
     #else
     #    :
     #fi
+    
+    if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASK" | grep libreoffice-language-pack) != "" ]]
+	then
+        LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 /usr/local/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
+        open "/usr/local/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"	
+    else
+	    :
+	fi
     
     #read -p 'do you want to update all installed casks that show "latest" as version (y/N)? ' CONT_LATEST
     #CONT_LATEST="N"
@@ -962,23 +1087,15 @@ else
     echo "homebrew is installed..."
 fi
 
-# checking if homebrew-cask is installed
-#if [[ $(brew cask --version | grep "homebrew-cask") == "" ]]
-#then
-#    echo "homebrew-cask not installed, exiting script..."
-#    exit
-#else
-#    echo "homebrew-cask is installed..."
-#fi
-#echo ''
-
-brew cask --version 2>&1 >/dev/null
-if [[ $? -eq 0 ]]
+# as of 2018-10-31 brew cask --version is deprecated
+#brew cask --version 2>&1 >/dev/null
+#if [[ $? -eq 0 ]]
+if [[ $(brew --version | grep homebrew-cask) != "" ]]
 then
     echo "homebrew-cask is installed..."
 else
-    echo "homebrew-cask not installed, exiting script..."
-    exit
+    echo "homebrew-cask not installed, skipping respective script parts..."
+    HOMEBREW_CASK_IS_INSTALLED="no"
 fi
 echo ''
 
@@ -1030,6 +1147,12 @@ then
         echo "all script dependencies installed..."
     fi
     
+    # number of parallel processes depending on cpu-cores
+    number-of-parallel-processes
+    
+    # raising ulimit for more allowed parallel processes
+    ulimit -n 512 
+    
     # checking if all formula dependencies are installed
     #echo ''
     echo "checking for formula dependencies..."
@@ -1060,11 +1183,11 @@ then
         echo "homebrew formulas path is empty or does not exist, exiting script..."
         exit
     else
-        :
+        echo "homebrew formulas are located in "$BREW_FORMULAS_PATH""
     fi
-    echo "homebrew formulas are located in "$BREW_FORMULAS_PATH""
+
     #
-    BREW_CASKS_PATH=$(brew cask doctor | grep -A1 -B1 "Homebrew-Cask Staging Location" | tail -1)
+    BREW_CASKS_PATH=$(brew cask doctor | grep -A1 -B1 "Cask Staging Location" | tail -1)
     export BREW_CASKS_PATH
     if [[ $(echo "$BREW_CASKS_PATH") == "" || ! -e "$BREW_CASKS_PATH" ]]
     then
@@ -1072,9 +1195,8 @@ then
         HOMEBREW_CASK_IS_INSTALLED="no"
     else
         HOMEBREW_CASK_IS_INSTALLED="yes"
-        :
+        echo "homebrew casks are located in "$BREW_CASKS_PATH""
     fi
-    echo "homebrew casks are located in "$BREW_CASKS_PATH""
     #echo ''
     
     sudo()
@@ -1110,13 +1232,19 @@ then
         :
     fi
     #
+    echo ''
+    echo "cleaning up..."
+    cleanup-all-homebrew & pids+=($!)
     if [[ $(echo "$HOMEBREW_CASK_IS_INSTALLED") == "yes" ]]
     then
-        cleanup-all-parallel
+        cleanup-formulae-parallel & pids+=($!)
+        cleanup-casks-parallel & pids+=($!)
         #cleanup-all-one-by-one
     else
-        cleanup-all-homebrew-only
+        cleanup-formulae-parallel & pids+=($!)
     fi
+    wait "${pids[@]}"
+    echo 'cleaning finished ;)'
 
 else
     echo "not online, skipping updates..."
