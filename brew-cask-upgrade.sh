@@ -112,12 +112,15 @@ sudo()
 homebrew_update() {
     echo ''
     echo "updating homebrew..."
-    brew update-reset 1> /dev/null 2> >(grep -v "Reset branch" 1>&2) && brew analytics off 1> /dev/null && brew update 1> /dev/null && brew prune 1> /dev/null && brew doctor 1> /dev/null
+    # brew prune deprecated as of 2019-01, using brew cleanup at the end of the script instead
+    brew update-reset 1> /dev/null 2> >(grep -v "Reset branch" 1>&2) && brew analytics off 1> /dev/null && brew update 1> /dev/null && brew doctor 1> /dev/null
     
     # working around a --json=v1 bug until it`s fixed
     # https://github.com/Homebrew/homebrew-cask/issues/52427
     #sed -i '' '/"conflicts_with" =>/s/.to_a//g' "$(brew --repository)"/Library/Homebrew/cask/cask.rb
-    sed -i '' '/"conflicts_with" =>/s/.to_a//g' "$BREW_PATH"/Library/Homebrew/cask/cask.rb
+    #sed -i '' '/"conflicts_with" =>/s/.to_a//g' "$BREW_PATH"/Library/Homebrew/cask/cask.rb
+    # fixed 2019-01-28
+    # https://github.com/Homebrew/brew/pull/5597
 
     echo 'updating homebrew finished ;)'
 }
@@ -135,14 +138,27 @@ number_of_parallel_processes() {
 }
 
 cleanup_all_homebrew() {
-    #brew cleanup
+    # making sure brew cache exists
+    HOMEBREW_CACHE_DIR=$(brew --cache)
+    mkdir -p "$HOMEBREW_CACHE_DIR"
+    chown "$USER":staff "$HOMEBREW_CACHE_DIR"/
+    chmod 755 "$HOMEBREW_CACHE_DIR"/
+    
     brew cleanup 1> /dev/null
+    # also seems to clear cleans hidden files and folders
     brew cleanup --prune=0 1> /dev/null
-    # should do the same withou output, but just to make sure              
-    rm -rf $(brew --cache)
+    
+    rm -rf "$HOMEBREW_CACHE_DIR"/{,.[!.],..?}*
     # brew cask cleanup is deprecated from 2018-09
     #brew cask cleanup
     #brew cask cleanup 1> /dev/null
+    
+    # brew cleanup has to be run after the rm -rf "$HOMEBREW_CACHE_DIR"/{,.[!.],..?}* again
+    # if not it will delete a file /Users/$USER/Library/Caches/Homebrew/.cleaned
+    # this file is produced by brew cleanup and is checked if brew cleanup was run in the last x days
+    # without the file brew thinks brew cleanup was not run and complains about it
+    # https://github.com/Homebrew/brew/issues/5644
+    brew cleanup 1> /dev/null
     
     # fixing red dots before confirming commit to cask-repair that prevent the commit from being made
     # https://github.com/vitorgalvao/tiny-scripts/issues/88
@@ -422,8 +438,38 @@ formulae_install_updates() {
         do
             FORMULA="$line"
             
-            echo 'updating '"$FORMULA"'...'
-            ${USE_PASSWORD} | brew upgrade "$FORMULA"
+            echo 'updating '"$FORMULA"'...'            
+            if [[ $(brew outdated --quiet | grep "^$FORMULA$") == "" ]] && [[ $(brew outdated --quiet | grep "/$FORMULA$") == "" ]]
+            #[[ $(brew outdated --verbose | grep "^$FORMULA[[:space:]]") == "" ]]
+            then
+                echo "$FORMULA"" already up-to-date..."
+            else
+                if [[ "$FORMULA" == "qtfaststart" ]]
+                then
+                    if [[ $(brew list | grep ffmpeg) != "" ]]
+                    then
+                        brew unlink qtfaststart
+                        brew unlink ffmpeg && brew link ffmpeg
+                        brew link --overwrite qtfaststart
+                    else
+                        :
+                    fi
+                elif [[ "$FORMULA" == "ffmpeg" ]]
+                then
+                    if [[ $(brew list | grep qtfaststart) != "" ]]
+                    then
+                        brew unlink ffmpeg
+                        brew unlink qtfaststart && brew link qtfaststart
+                        brew link --overwrite ffmpeg
+                    else
+                        :
+                    fi
+                else
+                    :
+                fi
+                ${USE_PASSWORD} | brew upgrade "$FORMULA"
+                #
+            fi
             echo 'removing old installed versions of '"$FORMULA"'...'
             ${USE_PASSWORD} | brew cleanup "$FORMULA"
             echo ''
@@ -447,8 +493,9 @@ formulae_install_updates() {
             #${USE_PASSWORD} | brew reinstall ffmpeg --with-fdk-aac --with-sdl2 --with-freetype --with-libass --with-libvorbis --with-libvpx --with-opus --with-x265
             if [[ $(ffmpeg -codecs 2>&1 | grep "\-\-enable-libx265") == "" ]]
             then
-                echo "rebuilding ffmpeg due to components updates..."
-                ${USE_PASSWORD} | HOMEBREW_DEVELOPER=1 brew reinstall --build-from-source ffmpeg --with-fdk-aac --with-sdl2 --with-freetype --with-libass --with-libvorbis --with-libvpx --with-opus --with-x265
+                #echo "rebuilding ffmpeg due to components updates..."
+                #${USE_PASSWORD} | HOMEBREW_DEVELOPER=1 brew reinstall --build-from-source ffmpeg --with-fdk-aac --with-sdl2 --with-freetype --with-libass --with-libvorbis --with-libvpx --with-opus --with-x265
+                :
             else
                 :
             fi
@@ -660,35 +707,42 @@ casks_install_updates() {
             fi
         done <"$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS"
         stop_sudo
-        
-        ### manual installations after install
-        
-        #if [[ "$VIRTUALBOX_EXTENSION_UPDATE_AVAILABLE" == "yes" ]]
-        #then
-        #    start_sudo
-        #    echo 'updating virtualbox...'
-        #    ${USE_PASSWORD} | brew cask reinstall virtualbox --force
-        #    echo ''
-        #    echo 'updating virtualbox-extension-pack...'
-        #    ${USE_PASSWORD} | brew cask reinstall virtualbox-extension-pack --force
-        #    stop_sudo
-        #    echo ''
-        #else
-        #    :
-        #fi
-        
-        if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" | grep libreoffice-language-pack) != "" ]]
-    	then
-            LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 /usr/local/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
-            open "/usr/local/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"	
-        else
-    	    :
-    	fi
     
         echo "installing casks updates finished ;)"
 
     fi
 
+}
+
+post_cask_installations() {
+    
+    ### manual installations after install
+    
+    #if [[ "$VIRTUALBOX_EXTENSION_UPDATE_AVAILABLE" == "yes" ]]
+    #then
+    #    start_sudo
+    #    echo 'updating virtualbox...'
+    #    ${USE_PASSWORD} | brew cask reinstall virtualbox --force
+    #    echo ''
+    #    echo 'updating virtualbox-extension-pack...'
+    #    ${USE_PASSWORD} | brew cask reinstall virtualbox-extension-pack --force
+    #    stop_sudo
+    #    echo ''
+    #else
+    #    :
+    #fi
+    
+    if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" | grep libreoffice-language-pack) != "" ]]
+	then
+	    echo ''
+        echo "installing libreoffice language pack..."
+        LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 /usr/local/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
+        open "/usr/local/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"	
+        #echo ''
+    else
+	    :
+	fi
+    
 }
 
 ###
@@ -998,7 +1052,15 @@ then
         cleanup_formulae & pids+=($!)
     fi
     wait "${pids[@]}"
+    
     echo 'cleaning finished ;)'
+    
+    if [[ $(echo "$HOMEBREW_CASK_IS_INSTALLED") == "yes" ]]
+    then
+        post_cask_installations
+    else
+        :
+    fi
 
 else
     echo "not online, skipping updates..."
