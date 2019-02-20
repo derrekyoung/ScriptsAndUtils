@@ -370,7 +370,7 @@ formulae_show_updates_parallel() {
         fi
         #echo NEW_VERSION is $NEW_VERSION
         local NUMBER_OF_INSTALLED_FORMULAE=$(echo "$INSTALLED_FORMULAE" | wc -l | sed 's/^ *//' | sed 's/ *$//')
-        local NUMBER_OF_FORMULA=$(echo "$INSTALLED_FORMULAE" | cat -n | grep "$FORMULA$" | awk '{print $1}' | sed 's/^ *//' | sed 's/ *$//')
+        local NUMBER_OF_FORMULA=$(echo "$INSTALLED_FORMULAE" | grep -n "^$FORMULA$" | awk -F: '{print $1}' | sed 's/^ *//' | sed 's/ *$//')
         local INSTALLED_VERSIONS=$(ls -1 "$BREW_FORMULAE_PATH"/"$FORMULA" | sort -V)
         #echo INSTALLED_VERSIONS is "$INSTALLED_VERSIONS"
         local NUMBER_OF_INSTALLED_VERSIONS=$(echo "$INSTALLED_VERSIONS" | wc -l | sed -e 's/^[ \t]*//')
@@ -574,7 +574,7 @@ casks_show_updates_parallel() {
         local NEW_VERSION=$(echo "$CASK_INFO" | jq -r '.version')
         #local NEW_VERSION=$(echo "$CASK_INFO" | grep -e "$CASK_NAME: .*" | cut -d ":" -f2 | head -1 | sed 's|(auto_updates)||g' | sed 's/^ *//' | sed 's/ *$//')
         local NUMBER_OF_INSTALLED_CASKS=$(echo "$INSTALLED_CASKS" | wc -l | sed 's/^ *//' | sed 's/ *$//')
-        local NUMBER_OF_CASK=$(echo "$INSTALLED_CASKS" | cat -n | grep "$CASK$" | awk '{print $1}' | sed 's/^ *//' | sed 's/ *$//')
+        local NUMBER_OF_CASK=$(echo "$INSTALLED_CASKS" | grep -n "^$CASK$" | awk -F: '{print $1}' | sed 's/^ *//' | sed 's/ *$//')
         local INSTALLED_VERSIONS=$(ls -1tc "$BREW_CASKS_PATH"/"$CASK")
         #echo INSTALLED_VERSIONS is "$INSTALLED_VERSIONS"
         local NUMBER_OF_INSTALLED_VERSIONS=$(echo "$INSTALLED_VERSIONS" | wc -l | sed -e 's/^[ \t]*//') 
@@ -615,9 +615,8 @@ casks_show_updates_parallel() {
             :
         	#echo "only one version installed..."
         fi
-        
-        CONT_LATEST="$(echo "$CONT_LATEST" | tr '[:upper:]' '[:lower:]')"    # tolower
-    	if [[ "$CONT_LATEST" == "y" || "$CONT_LATEST" == "yes" ]]
+    	
+    	if [[ "$CONT_LATEST" =~ ^(yes|y)$ ]]
         then
             if [[ "$NEW_VERSION" == "latest" ]] && [[ ${CASK_EXCLUDES} != *"$CASK"* ]]
             then
@@ -732,7 +731,7 @@ post_cask_installations() {
     #    :
     #fi
     
-    if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" | grep libreoffice-language-pack) != "" ]]
+    if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" | grep "^libreoffice-language-pack$") != "" ]]
 	then
 	    echo ''
         echo "installing libreoffice language pack..."
@@ -847,6 +846,19 @@ function stop_sudo() {
     unset SUDO_PID
     sudo -k
 }
+
+ask_for_variable () {
+	ANSWER_WHEN_EMPTY=$(echo "$QUESTION_TO_ASK" | awk 'NR > 1 {print $1}' RS='(' FS=')' | tail -n 1 | tr -dc '[[:upper:]]\n')
+	VARIABLE_TO_CHECK=$(echo "$VARIABLE_TO_CHECK" | tr '[:upper:]' '[:lower:]') # to lower
+	while [[ ! "$VARIABLE_TO_CHECK" =~ ^(yes|y|no|n)$ ]] || [[ -z "$VARIABLE_TO_CHECK" ]]
+	do
+		read -r -p "$QUESTION_TO_ASK" VARIABLE_TO_CHECK
+		if [[ "$VARIABLE_TO_CHECK" == "" ]]; then VARIABLE_TO_CHECK="$ANSWER_WHEN_EMPTY"; else :; fi
+		VARIABLE_TO_CHECK=$(echo "$VARIABLE_TO_CHECK" | tr '[:upper:]' '[:lower:]') # to lower
+	done
+	#echo VARIABLE_TO_CHECK is "$VARIABLE_TO_CHECK"...
+}
+
 
 ### trapping
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && SCRIPT_SOURCED="yes" || SCRIPT_SOURCED="no"
@@ -1011,9 +1023,11 @@ then
         ${USE_PASSWORD} | builtin command sudo -p '' -S "$@"
     }
     
-    #read -p 'do you want to update all installed casks that show "latest" as version (y/N)? ' CONT_LATEST
-    #export CONT_LATEST
-    export CONT_LATEST="N"
+    #VARIABLE_TO_CHECK="$CONT_LATEST"
+    #QUESTION_TO_ASK='do you want to update all installed casks that show "latest" as version (y/N)? '
+    #ask_for_variable
+    #CONT_LATEST="$VARIABLE_TO_CHECK"
+    CONT_LATEST="no"
     
     homebrew_update
     #
