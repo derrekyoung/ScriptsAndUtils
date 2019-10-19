@@ -592,7 +592,7 @@ casks_install_updates() {
         	if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" | grep "$i") != "" ]]
         	then
                 echo 'updating '"$i"'...'
-                use_password | brew cask reinstall "$i"
+                env_use_password | brew cask reinstall "$i"
                 #sed -i "" "/""$i""/d" "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS"
                 sed -i '' '/'"$i"'/d' "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS"
                 echo ''
@@ -658,7 +658,7 @@ post_cask_installations() {
 	then
 	    echo ''
         echo "updating macosfuse after virtualbox update..."
-        use_password | brew cask install --force osxfuse
+        env_use_password | brew cask install --force osxfuse
     else
         :
     fi
@@ -677,8 +677,15 @@ post_cask_installations() {
     if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" | grep "^textmate$") != "" ]]
     then
         # removing quicklook syntax highlight
-        #rm -r /Applications/TextMate.app/Contents/Library/QuickLook/TextMateQL.qlgenerator
-        :
+    	if [[ -e "$PATH_TO_APPS"/TextMate.app/Contents/Library/QuickLook/TextMateQL.qlgenerator ]]
+    	then
+    		rm -rf "$PATH_TO_APPS"/TextMate.app/Contents/Library/QuickLook/TextMateQL.qlgenerator
+    	else
+    		:
+    	fi        
+	    # reset quicklook and quicklook cache if neccessary
+	    #qlmanage -r
+	    #qlmanage -r cache
     else
         :
     fi
