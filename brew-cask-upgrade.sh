@@ -641,6 +641,13 @@ casks_install_updates() {
             else
                 :
             fi
+            if [[ "$CASK" == "zoomus" ]]
+            then 
+            	sleep 2
+            	osascript -e "tell app \""$PATH_TO_APPS"/zoom.us.app\" to quit" >/dev/null 2>&1
+            	sleep 2
+                env_active_source_app
+            fi
             
             # cleanup entries
             local INSTALLED_VERSIONS=$(ls -1tc "$BREW_CASKS_PATH"/"$CASK")
@@ -862,7 +869,7 @@ then
     fi
 
     #
-    BREW_CASKS_PATH=$(brew cask doctor | grep -A1 -B1 "Cask Staging Location" | tail -1)
+    BREW_CASKS_PATH=$(brew cask doctor 2>/dev/null | grep -A1 -B1 "Cask Staging Location" | tail -1)
     export BREW_CASKS_PATH
     if [[ $(echo "$BREW_CASKS_PATH") == "" || ! -e "$BREW_CASKS_PATH" ]]
     then
