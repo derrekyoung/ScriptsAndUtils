@@ -592,7 +592,7 @@ casks_install_updates() {
         	if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" | grep "$i") != "" ]]
         	then
                 echo 'updating '"$i"'...'
-                use_password | brew cask reinstall "$i"
+                env_use_password | brew cask reinstall "$i"
                 #sed -i "" "/""$i""/d" "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS"
                 sed -i '' '/'"$i"'/d' "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS"
                 echo ''
@@ -616,6 +616,38 @@ casks_install_updates() {
             #env_use_password | brew cask reinstall "$line" --force
             env_use_password | brew cask install "$CASK" --force
             echo ''
+            
+            if [[ "$CASK" == "teamviewer" ]]
+            then 
+            	sleep 2
+            	osascript -e "tell app \""$PATH_TO_APPS"/TeamViewer.app\" to quit" >/dev/null 2>&1
+            	sleep 2
+                env_active_source_app
+            fi
+            if [[ "$CASK" == "libreoffice" ]]
+            then
+                PATH_TO_FIRST_RUN_APP=""$PATH_TO_APPS"/LibreOffice.app"
+                env_set_open_on_first_run_permissions
+            else
+                :
+            fi
+            if [[ "$CASK" == "libreoffice-language-pack" ]]
+            then
+                LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK=$(ls -1 /usr/local/Caskroom/libreoffice-language-pack | sort -V | head -n 1)
+                PATH_TO_FIRST_RUN_APP="/usr/local/Caskroom/libreoffice-language-pack/$LATEST_INSTALLED_LIBREOFFICE_LANGUAGE_PACK/LibreOffice Language Pack.app"
+                env_set_open_on_first_run_permissions
+                PATH_TO_FIRST_RUN_APP=""$PATH_TO_APPS"/LibreOffice.app"
+                env_set_open_on_first_run_permissions
+            else
+                :
+            fi
+            if [[ "$CASK" == "zoomus" ]]
+            then 
+            	sleep 2
+            	osascript -e "tell app \""$PATH_TO_APPS"/zoom.us.app\" to quit" >/dev/null 2>&1
+            	sleep 2
+                env_active_source_app
+            fi
             
             # cleanup entries
             local INSTALLED_VERSIONS=$(ls -1tc "$BREW_CASKS_PATH"/"$CASK")
@@ -658,7 +690,7 @@ post_cask_installations() {
 	then
 	    echo ''
         echo "updating macosfuse after virtualbox update..."
-        use_password | brew cask install --force osxfuse
+        env_use_password | brew cask install --force osxfuse
     else
         :
     fi
@@ -677,8 +709,15 @@ post_cask_installations() {
     if [[ $(cat "$TMP_DIR_CASK"/"$DATE_LIST_FILE_CASKS" | grep "^textmate$") != "" ]]
     then
         # removing quicklook syntax highlight
-        #rm -r /Applications/TextMate.app/Contents/Library/QuickLook/TextMateQL.qlgenerator
-        :
+    	if [[ -e "$PATH_TO_APPS"/TextMate.app/Contents/Library/QuickLook/TextMateQL.qlgenerator ]]
+    	then
+    		rm -rf "$PATH_TO_APPS"/TextMate.app/Contents/Library/QuickLook/TextMateQL.qlgenerator
+    	else
+    		:
+    	fi        
+	    # reset quicklook and quicklook cache if neccessary
+	    #qlmanage -r
+	    #qlmanage -r cache
     else
         :
     fi
@@ -759,6 +798,8 @@ then
     # online
     echo ''
     
+    env_identify_terminal
+    
     env_start_sudo
 
     env_command_line_tools_install_shell
@@ -828,7 +869,7 @@ then
     fi
 
     #
-    BREW_CASKS_PATH=$(brew cask doctor | grep -A1 -B1 "Cask Staging Location" | tail -1)
+    BREW_CASKS_PATH=$(brew cask doctor 2>/dev/null | grep -A1 -B1 "Cask Staging Location" | tail -1)
     export BREW_CASKS_PATH
     if [[ $(echo "$BREW_CASKS_PATH") == "" || ! -e "$BREW_CASKS_PATH" ]]
     then
